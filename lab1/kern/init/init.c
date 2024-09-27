@@ -33,9 +33,9 @@ int kern_init(void) {
 
     intr_enable();  // enable irq interrupt
     
-    asm("mret");
-    asm("ebreak");
-    asm("mret");
+    // asm("mret"); // lab1-ex3 调试用
+    // asm("ebreak"); // lab1-ex3 调试用
+    // asm("mret"); // lab1-ex3 调试用
 
     while (1)
         ;
