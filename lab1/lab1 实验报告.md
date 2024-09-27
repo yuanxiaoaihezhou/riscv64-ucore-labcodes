@@ -70,8 +70,22 @@ __alltraps:
 `SAVE_ALL`宏通过`addi sp, sp, -36 * REGBYTES`向栈分配足够的空间存放`36`个寄存器的值。其中，`32`个是通用寄存器，另外`4`个是与中断相关的控制寄存器（`sstatus`、`sepc`、`scause` 和 `stval`）。这些寄存器的保存顺序严格按照 `trapframe`结构体的定义排列。具体而言，通用寄存器`x0`到`x31`按照寄存器编号存储，位置由`n * REGBYTES`确定，其中`n`是寄存器编号。例如，`x0`存储在栈的偏移量`0 * REGBYTES`处，`x1`存储在`1 * REGBYTES`处，`x2`被保存在`2 * REGBYTES`处等。控制状态寄存器包括`sstatus`、`sepc`、`scause`和`sbadaddr`，它们被存储在通用寄存器之后。`sstatus`存储在`32 * REGBYTES`处，`sepc`存储在`33 * REGBYTES`处，`sbadaddr`存储在 `34 * REGBYTES`处，`scause`存储在`35 * REGBYTES`处。
 #### Q4 对于任何中断，`__alltraps` 中都需要保存所有寄存器吗？
 理论上所有寄存器都需要保存。保存寄存器的目的是在中断或异常发生时，确保能够在处理完成后恢复到原先的程序状态。如果中断处理的代码不会修改某些寄存器，或者特定中断不涉及用户态的上下文保存，那么就不需要保存所有寄存器。例如，`0`号寄存器在任何情况下都是`0`，在这种情况下就不用保存。  
+
 ## 扩展练习 Challenge2：理解上下文切换机制
-回答：在`trapentry.S`中汇编代码`csrw sscratch, sp；csrrw s0, sscratch, x0`实现了什么操作，目的是什么？`save all`里面保存了`stval scause`这些`csr`，而在`restore all`里面却不还原它们？那这样store的意义何在呢？
+
+回答：在trapentry.S中汇编代码 csrw sscratch, sp；csrrw s0, sscratch, x0实现了什么操作，目的是什么？save all里面保存了stval scause这些csr，而在restore all里面却不还原它们？那这样store的意义何在呢？
+
+## Answer
+### 对 `csrw sscratch, sp` 的理解
+- 这条指令将当前栈指针 `sp` 的值写入到 `sscratch` 寄存器中。
+- **目的**：`sscratch` 是一个特权寄存器，通常用于保存一些临时数据。这里将栈指针保存到 `sscratch`，是为了在后续的中断处理中，防止栈指针被修改。这样，在中断处理过程中或发生递归中断时，可以知道之前的栈位置，有助于后续的恢复操作。
+
+### 对 `csrrw s0, sscratch, x0` 的理解
+- 这条指令的作用是将 `sscratch` 寄存器的值读入到 `s0`，并同时将 `x0`（即 0）写入 `sscratch` 寄存器。
+- **目的**：它将先前保存在 `sscratch` 寄存器中的栈指针值（之前由 `csrw sscratch, sp` 保存）恢复到寄存器 `s0` 中，并将 `sscratch `清零。这样，如果发生递归异常，`sscratch` 为零，处理程序可以检测出它是从内核中触发的异常。这在异常处理流程中起到保护和区分内核态与用户态中断的作用。
+
+### 为什么在 `RESTORE_ALL` 中不还原这些 CSR？
+- **无恢复必要**：`scause`寄存器存储了异常发生的原因，而`sbadaddr`寄存器存储了某些异常相关的地址。在中断或异常处理完成后，系统将恢复到原来的执行点，并继续执行原程序，不需要还原这些寄存器的内容。这些寄存器的内容在处理过程中用到，处理完成后就不再需要了。
 
 ## 扩展练习 Challenge3：完善异常中断
 编程完善在触发一条非法指令异常`mret`和，在`kern/trap/trap.c`的异常处理函数中捕获，并对其进行处理，简单输出异常类型和异常指令触发地址，即`“Illegal instruction caught at 0x(地址)”`，`“ebreak caught at 0x（地址）”`与`“Exception type:Illegal instruction"`，`“Exception type: breakpoint”`。
