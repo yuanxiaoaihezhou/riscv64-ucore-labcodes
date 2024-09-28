@@ -262,7 +262,7 @@ void cons_init(void) {}
 
 /* cons_putc - print a single character @c to console devices */
 void cons_putc(int c) { sbi_console_putchar((unsigned char)c); }
-    80200172:	0ff57513          	andi	a0,a0,255
+    80200172:	0ff57513          	zext.b	a0,a0
     80200176:	02f0006f          	j	802009a4 <sbi_console_putchar>
 
 000000008020017a <intr_enable>:
@@ -975,7 +975,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap) 
     8020068c:	4825                	li	a6,9
         switch (ch = *(unsigned char *)fmt ++) {
     8020068e:	fdd6059b          	addiw	a1,a2,-35
-    80200692:	0ff5f593          	andi	a1,a1,255
+    80200692:	0ff5f593          	zext.b	a1,a1
     80200696:	00140d13          	addi	s10,s0,1
     8020069a:	04b56263          	bltu	a0,a1,802006de <vprintfmt+0xbc>
     8020069e:	058a                	slli	a1,a1,0x2
@@ -1012,7 +1012,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap) 
     802006cc:	846a                	mv	s0,s10
     802006ce:	00140d13          	addi	s10,s0,1
     802006d2:	fdd6059b          	addiw	a1,a2,-35
-    802006d6:	0ff5f593          	andi	a1,a1,255
+    802006d6:	0ff5f593          	zext.b	a1,a1
     802006da:	fcb572e3          	bgeu	a0,a1,8020069e <vprintfmt+0x7c>
             putch('%', putdat);
     802006de:	85a6                	mv	a1,s1
