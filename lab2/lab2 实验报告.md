@@ -271,11 +271,11 @@ best_fit_free_pages(struct Page *base, size_t n) {
 
 在终端运行 make grade，测试通过：
 
-![alt text](image.png)
+![alt text](../pic/lab2-image-1.png)
 
 在终端运行 make qemu，也会输出测试通过的日志：
 
-![alt text](image2.png)
+![alt text](../pic/lab2-image-2.png)
 
 ### Best-Fit 算法的改进空间
 
