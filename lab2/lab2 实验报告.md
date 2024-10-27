@@ -328,3 +328,30 @@ best_fit_free_pages(struct Page *base, size_t n) {
 ## 扩展练习Challenge：`buddy system`（伙伴系统）分配算法（需要编程）
 ## Answer
 ![alt text](../pic/lab2-image-3.png)
+
+## 扩展练习Challenge：硬件的可用物理内存范围的获取方法（思考题）
+如果 OS 无法提前知道当前硬件的可用物理内存范围，请问你有何办法让 OS 获取可用物理内存范围？
+### 实现思路
+经过一些资料的查阅，想让操作系统动态获取物理内存的可用范围，我们可以使用引导加载器提供的硬件资源扫描信息。以下是一些可能实现步骤：
+
+1. 利用引导加载器传递的内存映射信息
+在系统启动时，引导加载器会扫描硬件资源（包括内存）并记录到一份内存映射表（例如DTB），并在传递控制权给内核时将DTB地址存入寄存器a1。
+
+2. 检索并解析内存映射信息
+在操作系统启动后，pmm_init()函数可以通过读取寄存器的值来获取DTB的起始地址。DTB格式中包括物理内存地址范围的定义，操作系统可以遍历其结构找到memory节点，该节点中详细记录了内存的物理起始地址和大小。
+
+3. 初始化物理内存管理器
+在解析到内存的范围后，将其用于初始化物理内存管理器。我们在pmm_init()中调用init_memmap()函数，将解析得到的物理地址和大小按页分配给内存管理器。以实验中的代码为例：
+
+```c
+void pmm_init() {
+    uint64_t mem_start, mem_size;
+
+    // 解析DTB，提取物理内存的起始地址和大小
+    if (parse_dtb(dtb_address, &mem_start, &mem_size)) {
+        init_memmap(pa2page(mem_start), mem_size / PGSIZE);
+    } else {
+        panic("Failed to retrieve memory layout");
+    }
+}
+```
