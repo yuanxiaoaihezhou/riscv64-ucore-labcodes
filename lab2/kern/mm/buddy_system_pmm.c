@@ -31,27 +31,18 @@ static unsigned int log2(size_t n) {
 }
 // 向上取整到最接近的2的幂
 static size_t ceil_to_power_of_two(size_t n) {
-    size_t result = 1;
-    if (!is_power_of_two(n)) {
-        while (n) {
-            n >>= 1;
-            result <<= 1;
-        }
-        return result;
+    if (is_power_of_two(n)) {
+        return n;
     }
-    return n;
+    return 1 << (log2(n) + 1);
 }
+
 // 向下取整到最接近的2的幂
 static size_t floor_to_power_of_two(size_t n) {
-    size_t result = 1;
-    if (!is_power_of_two(n)) {
-        while (n) {
-            n >>= 1;
-            result <<= 1;
-        }
-        return result >> 1;
+    if (is_power_of_two(n)) {
+        return n;
     }
-    return n;
+    return 1 << log2(n);
 }
 
 // 初始化空闲页计数
@@ -99,16 +90,12 @@ static void buddy_system_init_memmap(struct Page *base, size_t n) {
 // 分配页
 static struct Page *buddy_system_alloc_pages(size_t n) {
     assert(n > 0);
-    unsigned int size = n;
+    unsigned int size = ceil_to_power_of_two(n);;
     unsigned int index = 0;
     unsigned int node_size;
     unsigned int offset = 0;
     struct Page *page = NULL;
 
-    // 将n向上取整到最接近的2的幂
-    if (!is_power_of_two(size)) {
-        size = ceil_to_power_of_two(size);
-    }
     if (buddy_tree[index] < size) {
         return NULL;
     }

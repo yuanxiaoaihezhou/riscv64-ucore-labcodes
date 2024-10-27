@@ -22,7 +22,7 @@ PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 (THU.CST) os is loading ...
 Special kernel symbols:
   entry  0xffffffffc0200032 (virtual)
-  etext  0xffffffffc0201770 (virtual)
+  etext  0xffffffffc02017ae (virtual)
   edata  0xffffffffc0206010 (virtual)
   end    0xffffffffc0206488 (virtual)
 Kernel executable memory footprint: 26KB
