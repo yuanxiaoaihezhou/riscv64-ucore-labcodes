@@ -54,8 +54,42 @@ basic_check 和 default_check 用于测试内存分配和释放是否正确。
 1. 内存初始化：系统在启动过程中，会调用内存管理器初始化函数来准备空闲内存的管理数据结构。这个步骤是通过 default_init 和 default_init_memmap 函数实现的。
 2. 内存分配请求处理：当系统需要分配物理内存时，会调用 default_alloc_pages 函数，在空闲内存链表中找到第一个足够大的空闲块，分配给请求者。
 3. 内存释放和合并：当内存不再需要时，通过 default_free_pages 函数将其释放回空闲链表，并尝试将相邻的空闲块合并，以减少内存碎片。
+### 程序优缺点分析
+在详细分析改进空间之前，我们先纵观程序的优缺点。优点显然是由于First Fit算法在分配时只需找到第一个满足条件的块，因此代码实现相对简单。default_alloc_pages函数中的核心查找逻辑如下：
+```c
+list_entry_t *le = &free_list;
+while ((le = list_next(le)) != &free_list) {
+    struct Page *p = le2page(le, page_link);
+    if (p->property >= n) {
+        page = p;
+        break;
+    }
+}
+```
+然后我们来找它的缺点。首先，First Fit算法在分配时容易产生碎片，特别是在链表前端保留了很多较小的空闲块。碎片化的存在会降低内存利用率。例如，当多次分配并释放不同大小的块后，链表中的一些块可能仅剩下很小的空间。
+```c
+if (page->property > n) {
+    struct Page *p = page + n;
+    p->property = page->property - n;
+    SetPageProperty(p);
+    list_add(prev, &(p->page_link));
+}
+```
+我们可以从上面的代码中看出，每次分配时会切割大块内存为两部分，虽然满足了请求，但在链表中留下了零散小块，后续小块会越来越多，导致碎片化问题。
+然后是效率问题：First Fit算法在链表中遍历每个块，因此查找效率随着链表长度增加而降低。对于内存块较多的情况，这种线性查找方式导致分配效率变低：
+```c
+list_entry_t *le = &free_list;
+while ((le = list_next(le)) != &free_list) {
+    struct Page *p = le2page(le, page_link);
+    if (p->property >= n) {
+        page = p;
+        break;
+    }
+}
+```
+我们可以看出，每次查找时均需从链表头开始遍历，导致时间复杂度为O(n)。在内存块数量较多时，逐一查找性能较差，影响整体效率。
 ### First Fit 算法的改进空间
-First Fit 算法虽然简单直观，但在实际应用中存在一些不足，改进 First Fit 算法的核心目标在于**减少碎片化** 和 **提高查找效率**，可以考虑从如下几个方面进行改进：
+根据我们刚才的分析，我们可以看出改进 First Fit 算法的核心目标在于**减少碎片化** 和 **提高查找效率**，可以考虑从如下几个方面进行改进：
 1. 减少内存碎片：
 由于 First Fit 每次从链表头开始查找第一个合适的块进行分配，可能会在链表前端留下很多较小的空闲块，导致外部碎片增加。
 可以考虑使用 Best Fit 或 Next Fit 算法，Best Fit 通过寻找最合适的块来减少碎片，而 Next Fit 则通过从上次分配结束的位置继续查找来减少前端碎片。
@@ -107,7 +141,7 @@ best_fit_init_memmap(struct Page *base, size_t n) {
         list_entry_t* le = &free_list;
         while ((le = list_next(le)) != &free_list) {
             struct Page* page = le2page(le, page_link);
-             /*LAB2 EXERCISE 2: YOUR CODE 2213524*/ 
+             /*LAB2 EXERCISE 2: YOUR CODE 2213524 2211144*/ 
             // 编写代码
             // 1、当base < page时，找到第一个大于base的页，将base插入到它前面，并退出循环
             // 2、当list_next(le) == &free_list时，若已经到达链表结尾，将base插入到链表尾部
@@ -218,7 +252,7 @@ best_fit_free_pages(struct Page *base, size_t n) {
     list_entry_t* le = list_prev(&(base->page_link));
     if (le != &free_list) {
         p = le2page(le, page_link);
-        /*LAB2 EXERCISE 2: YOUR CODE 2213524*/ 
+        /*LAB2 EXERCISE 2: YOUR CODE 2213524 2211133*/ 
          // 编写代码
         // 1、判断前面的空闲页块是否与当前页块是连续的，如果是连续的，则将当前页块合并到前面的空闲页块中
         // 2、首先更新前一个空闲页块的大小，加上当前页块的大小

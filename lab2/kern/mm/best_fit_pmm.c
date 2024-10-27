@@ -87,7 +87,7 @@ best_fit_init_memmap(struct Page *base, size_t n) {
         list_entry_t* le = &free_list;
         while ((le = list_next(le)) != &free_list) {
             struct Page* page = le2page(le, page_link);
-             /*LAB2 EXERCISE 2: YOUR CODE 2213524*/ 
+             /*LAB2 EXERCISE 2: YOUR CODE 2213524 2211144*/ 
             // 编写代码
             // 1、当base < page时，找到第一个大于base的页，将base插入到它前面，并退出循环
             // 2、当list_next(le) == &free_list时，若已经到达链表结尾，将base插入到链表尾部
@@ -173,7 +173,7 @@ best_fit_free_pages(struct Page *base, size_t n) {
     list_entry_t* le = list_prev(&(base->page_link));
     if (le != &free_list) {
         p = le2page(le, page_link);
-        /*LAB2 EXERCISE 2: YOUR CODE 2213524*/ 
+        /*LAB2 EXERCISE 2: YOUR CODE 2213524 2211133*/ 
          // 编写代码
         // 1、判断前面的空闲页块是否与当前页块是连续的，如果是连续的，则将当前页块合并到前面的空闲页块中
         // 2、首先更新前一个空闲页块的大小，加上当前页块的大小
