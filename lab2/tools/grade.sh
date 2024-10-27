@@ -360,7 +360,7 @@ echo "<<<<<<<<<<<<<<< here_run_check <<<<<<<<<<<<<<<<<<"
 
 pts=5
 quick_check 'check physical_memory_map_information'                                         \
-    'memory management: best_fit_pmm_manager'                     \
+    'memory management: buddy_system_pmm_manager'                     \
     '  memory: 0x0000000007e00000, [0x0000000080200000, 0x0000000087ffffff].'                                  \
 
 pts=20

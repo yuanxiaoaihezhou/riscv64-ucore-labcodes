@@ -22,13 +22,270 @@ PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 (THU.CST) os is loading ...
 Special kernel symbols:
   entry  0xffffffffc0200032 (virtual)
-  etext  0xffffffffc02019ae (virtual)
+  etext  0xffffffffc0201770 (virtual)
   edata  0xffffffffc0206010 (virtual)
-  end    0xffffffffc0206470 (virtual)
+  end    0xffffffffc0206488 (virtual)
 Kernel executable memory footprint: 26KB
-memory management: best_fit_pmm_manager
+memory management: buddy_system_pmm_manager
 physcial memory map:
   memory: 0x0000000007e00000, [0x0000000080200000, 0x0000000087ffffff].
+
+-----------------Buddy System Initialized!------------------
+
+Base page address: 0xffffffffc020f318, Total pages: 16384
+Buddy tree address: 0xffffffffc02af318, Tree size: 32767
+
+-----------------Buddy Check Begins!------------------
+
+16384 
+8192(2) 
+4096(4) 
+2048(8) 
+1024(16) 
+512(32) 
+256(64) 
+128(128) 
+64(256) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+
+---------------------First Check!---------------------
+
+Allocated page address: 0xffffffffc020f318, Requested size: 1, Allocated size: 1
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+256 512(31) 
+128 256(63) 
+64 128(127) 
+32 64(255) 
+16 32(511) 
+8 16(1023) 
+4 8(2047) 
+2 4(4095) 
+1 2(8191) 
+0 1(16383) 
+Allocated page address: 0xffffffffc020f340, Requested size: 1, Allocated size: 1
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+256 512(31) 
+128 256(63) 
+64 128(127) 
+32 64(255) 
+16 32(511) 
+8 16(1023) 
+4 8(2047) 
+2 4(4095) 
+0 2(8191) 
+0(2) 1(16382) 
+Allocated page address: 0xffffffffc020f368, Requested size: 1, Allocated size: 1
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+256 512(31) 
+128 256(63) 
+64 128(127) 
+32 64(255) 
+16 32(511) 
+8 16(1023) 
+4 8(2047) 
+1 4(4095) 
+0 1 2(8190) 
+0(3) 1(16381) 
+Freed page address: 0xffffffffc020f318, Requested size: 1, Freed size: 1
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+256 512(31) 
+128 256(63) 
+64 128(127) 
+32 64(255) 
+16 32(511) 
+8 16(1023) 
+4 8(2047) 
+1 4(4095) 
+1(2) 2(8190) 
+1 0(2) 1(16381) 
+Freed page address: 0xffffffffc020f340, Requested size: 1, Freed size: 1
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+256 512(31) 
+128 256(63) 
+64 128(127) 
+32 64(255) 
+16 32(511) 
+8 16(1023) 
+4 8(2047) 
+2 4(4095) 
+2 1 2(8190) 
+1(2) 0 1(16381) 
+Freed page address: 0xffffffffc020f368, Requested size: 1, Freed size: 1
+Buddy tree is in initial state.
+
+---------------------Second Check!---------------------
+
+Allocated page address: 0xffffffffc020f318, Requested size: 100, Allocated size: 128
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+256 512(31) 
+128 256(63) 
+0 128(127) 
+64(256) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Allocated page address: 0xffffffffc0211b18, Requested size: 240, Allocated size: 256
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+128 512(31) 
+128 0 256(62) 
+0 128(127) 
+64(256) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Allocated page address: 0xffffffffc0210718, Requested size: 64, Allocated size: 64
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+64 512(31) 
+64 0 256(62) 
+0 64 128(126) 
+64(2) 0 64(253) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Allocated page address: 0xffffffffc0214318, Requested size: 253, Allocated size: 256
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+256 1024(15) 
+64 256 512(30) 
+64 0(2) 256(61) 
+0 64 128(126) 
+64(2) 0 64(253) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Freed page address: 0xffffffffc0211b18, Requested size: 240, Freed size: 256
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+256 1024(15) 
+256(2) 512(30) 
+64 256 0 256(61) 
+0 64 128(126) 
+64(2) 0 64(253) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Freed page address: 0xffffffffc020f318, Requested size: 100, Freed size: 128
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+256 1024(15) 
+256(2) 512(30) 
+128 256 0 256(61) 
+128 64 128(126) 
+64(2) 0 64(253) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Allocated page address: 0xffffffffc020f318, Requested size: 75, Allocated size: 128
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+256 1024(15) 
+256(2) 512(30) 
+64 256 0 256(61) 
+0 64 128(126) 
+64(2) 0 64(253) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Freed page address: 0xffffffffc0210718, Requested size: 64, Freed size: 64
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+256 1024(15) 
+256(2) 512(30) 
+128 256 0 256(61) 
+0 128(127) 
+64(256) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Freed page address: 0xffffffffc020f318, Requested size: 75, Freed size: 128
+8192 
+4096 8192 
+2048 4096(3) 
+1024 2048(7) 
+512 1024(15) 
+512 256 512(30) 
+256(2) 0 256(61) 
+128(128) 
+64(256) 
+32(512) 
+16(1024) 
+8(2048) 
+4(4096) 
+2(8192) 
+1(16384) 
+Freed page address: 0xffffffffc0214318, Requested size: 253, Freed size: 256
+Buddy tree is in initial state.
 check_alloc_page() succeeded!
 satp virtual address: 0xffffffffc0205000
 satp physical address: 0x0000000080205000
