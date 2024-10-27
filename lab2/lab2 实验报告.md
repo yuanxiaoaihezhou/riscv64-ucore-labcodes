@@ -324,3 +324,7 @@ best_fit_free_pages(struct Page *base, size_t n) {
 **3. 内存合并的复杂性**
 - **问题**：在 `best_fit_free_pages` 函数中，需要遍历空闲链表以找到合适的插入位置，同时还要进行前后相邻块的合并，增加了代码复杂度和运行时间。
 - **改进建议**：可以将空闲块按大小和地址分别维护两个链表，或者使用双链表结构同时记录按地址排序和按大小排序，从而在释放和合并时提高效率。
+
+## 扩展练习Challenge：`buddy system`（伙伴系统）分配算法（需要编程）
+## Answer
+![alt text](../pic/lab2-image-3.png)
