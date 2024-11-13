@@ -328,6 +328,7 @@ best_fit_free_pages(struct Page *base, size_t n) {
 ## 扩展练习Challenge：`buddy system`（伙伴系统）分配算法（需要编程）
 ## Answer
 ![alt text](../pic/lab2-image-3.png)
+具体讲解参考文档`lab2 buddy_system.md`
 
 ## 扩展练习Challenge：硬件的可用物理内存范围的获取方法（思考题）
 如果 OS 无法提前知道当前硬件的可用物理内存范围，请问你有何办法让 OS 获取可用物理内存范围？
