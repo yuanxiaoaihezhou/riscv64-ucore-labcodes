@@ -349,6 +349,10 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
     uint32_t perm = PTE_U;
     if (vma->vm_flags & VM_WRITE) {
         perm |= (PTE_R | PTE_W);
+    } else if (vma->vm_flags & VM_READ) {
+        perm |= PTE_R;
+    } else if (vma->vm_flags & VM_EXEC) {
+        perm |= PTE_X;
     }
     addr = ROUNDDOWN(addr, PGSIZE);
 
@@ -377,13 +381,25 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
     ptep = get_pte(mm->pgdir, addr, 1);  //(1) try to find a pte, if pte's
                                          //PT(Page Table) isn't existed, then
                                          //create a PT.
+    if (ptep == NULL) {
+        cprintf("get_pte failed in do_pgfault\n");
+        goto failed;
+    }
+
     if (*ptep == 0) {
-        if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {
+        // 页表项为空，分配新的物理页并建立映射
+        struct Page *page = pgdir_alloc_page(mm->pgdir, addr, perm);
+        if (page  == NULL) {
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
             goto failed;
         }
+        // 将页面标记为可交换，并加入到交换管理器
+        if (swap_init_ok) {
+            swap_map_swappable(mm, addr, page, 1);
+            page->pra_vaddr = addr;
+        }
     } else {
-        /*LAB3 EXERCISE 3: YOUR CODE
+        /*LAB3 EXERCISE 3: YOUR CODE 2213524
         * 请你根据以下信息提示，补充函数
         * 现在我们认为pte是一个交换条目，那我们应该从磁盘加载数据并放到带有phy addr的页面，
         * 并将phy addr与逻辑addr映射，触发交换管理器记录该页面的访问情况
@@ -406,6 +422,21 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             //map of phy addr <--->
             //logical addr
             //(3) make the page swappable.
+
+            // (1) Load the content from disk into a new page
+            if (swap_in(mm, addr, &page) != 0) {
+                cprintf("swap_in in do_pgfault failed\n");
+                goto failed;
+            }
+            // (2) Insert the page into the page table with correct permissions
+            if (page_insert(mm->pgdir, page, addr, perm) != 0) {
+                cprintf("page_insert in do_pgfault failed\n");
+                free_page(page);
+                goto failed;
+            }
+            // (3) Mark the page as swappable
+            swap_map_swappable(mm, addr, page, 1);
+
             page->pra_vaddr = addr;
         } else {
             cprintf("no swap_init_ok but ptep is %x, failed\n", *ptep);
