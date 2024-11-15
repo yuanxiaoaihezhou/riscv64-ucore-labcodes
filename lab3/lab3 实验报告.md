@@ -149,3 +149,71 @@ swapfs_write(swap_entry_t entry, struct Page *page) {
  return ide_write_secs(SWAP_DEV_NO, swap_offset(entry) * PAGE_NSECT, page2kva(page), PAGE_NSECT);
 }
 ```
+在`pgdir_alloc_page()`调用`alloc_page()`获得分配的页面后会调用 `page_insert()`
+```c++
+int page_insert(pde_t *pgdir, struct Page *page, uintptr_t la, uint32_t perm) {
+    pte_t *ptep = get_pte(pgdir, la, 1);
+    if (ptep == NULL) {
+        return -E_NO_MEM;
+    }
+    page_ref_inc(page);
+    if (*ptep & PTE_V) {
+        struct Page *p = pte2page(*ptep);
+        if (p == page) {
+            page_ref_dec(page);
+        } else {
+            page_remove_pte(pgdir, la, ptep);
+        }
+    }
+    *ptep = pte_create(page2ppn(page), PTE_V | perm);
+    tlb_invalidate(pgdir, la);
+    return 0;
+}
+```
+`page_insert()`用于将虚拟地址和页面之间建立映射关系。   
+首先，使用`get_pte()`获取页表项，然后判断页表项对应的页面和将要建立映射的页面是否相同。如果不同的话调用`page_remove_pte()`将页表项失效并调用`pte_create()`建立新的页表项并将其赋值给`get_pte()`找到的页表项的地址。
+> `page_remove_pte()`执行时会找到`pte`对应的页面，减少其引用，并将页面释放。
+> `pte_create()`直接根据物理页号进行偏移并对标志位进行设置。
+
+接下来`pgdir_alloc_page()`调用`swap_map_swappable()`。
+> `swap_map_swappable()`用于将页面加入相应的链表，设置页面可交换。
+
+如果`do_pgfault()`获取的`pte`不为空的话，则首先会调用`swap_in()`。
+
+> `swap_in()`的作用是分配一个页面并从磁盘中将相应的值写入到此页面上。
+
+然后会调用`page_insert`函数进行页面的映射以及调用 `swap_map_swappable()`将页面加入相应的链表，设置页面可交换。
+
+## 练习2：深入理解不同分页模式的工作原理（思考题）
+get_pte()函数（位于`kern/mm/pmm.c`）用于在页表中查找或创建页表项，从而实现对指定线性地址对应的物理页的访问和映射操作。这在操作系统中的分页机制下，是实现虚拟内存与物理内存之间映射关系非常重要的内容。
+ - get_pte()函数中有两段形式类似的代码， 结合sv32，sv39，sv48的异同，解释这两段代码为什么如此相像。
+ - 目前get_pte()函数将页表项的查找和页表项的分配合并在一个函数里，你认为这种写法好吗？有没有必要把两个功能拆开？
+
+## Answer：
+首先我们明确`sv32`，`sv39`，`sv48`的异同：
+>`sv32` (32-bit VAs for RV32)
+用于32位的RISC-V架构。
+虚拟地址是32位。（其中高十位是其在二级页表的页内偏移，中十位是其在一级页表的页内偏移，低十二位是其在所分配的物理页上的页内偏移）
+使用两级页表。
+
+>`sv39` (39-bit VAs for RV64)
+用于64位的RISC-V架构。
+虚拟地址是39位。（9+9+9+12）
+使用三级页表。
+
+>`sv48` (48-bit VAs for RV64)
+同样是为64位的RISC-V架构设计的。
+虚拟地址是48位。（9+9+9+12）
+使用四级页表。
+
+`get_pte()`的逻辑类似于递归查找，根据`PDX1`和三级页表`PDE`找到二级页表`PDE`，再结合`PDX0`找到一级页表`PDE`，根据`PTX`找到`PTE`。
+
+这里会有两个结果：
+- 页表项有效：已经存在合适页表，返回该页表项地址。
+- 页表项无效：
+ - 如果当前处理的是最底层的页表级别，表示已经到达页表的叶子，需要创建一个新的页表项，并将其添加到当前页表中。
+ - 如果当前处理的不是最底层的页表级别，表示需要继续往下一级的页表查找或创建。函数会继续向下寻找，在下一级的页表上执行相同的操作。
+
+这两段代码相似的原因是，不论是处理`sv32`、`sv39`还是`sv48`的页表，它们的基本结构和操作逻辑是相似的。不同的只是地址空间大小和页表的层次结构。因此，为了处理不同的地址空间大小，可以重用类似的代码结构，仅仅根据具体的需求调整页表项的大小和页表的层次结构。
+
+这么写法好。目前没有必要拆分两个功能，目前我们只使用了一个标记位（创建位）就进行了分配。而且建立映射分配的前提是找不到，所以在分配前我们必须查找，查找必然是分配的必要条件，完全没有必要用两个函数，如果我们只需要查找的话可以通过标志位进行设置。
