@@ -83,4 +83,69 @@ struct Page *alloc_pages(size_t n) {
 }
 ```
 在`alloc_pages()`中，我们首先根据物理页面分配算法分配一个物理页面，然后调用`swap_out()`。    
-`swap_out()`
+```c++
+int swap_out(struct mm_struct *mm, int n, int in_tick)
+{
+     int i;
+     for (i = 0; i != n; ++ i)
+     {
+          uintptr_t v;
+          struct Page *page;
+          int r = sm->swap_out_victim(mm, &page, in_tick);
+          if (r != 0) {
+                    cprintf("i %d, swap_out: call swap_out_victim failed\n",i);
+                  break;
+          }          
+          
+          v=page->pra_vaddr; 
+          pte_t *ptep = get_pte(mm->pgdir, v, 0);
+          assert((*ptep & PTE_V) != 0);
+
+          if (swapfs_write( (page->pra_vaddr/PGSIZE+1)<<8, page) != 0) {
+                    cprintf("SWAP: failed to save\n");
+                    sm->map_swappable(mm, v, page, 0);
+                    continue;
+          }
+          else {
+                    cprintf("swap_out: i %d, store page in vaddr 0x%x to disk swap entry %d\n", i, v, page->pra_vaddr/PGSIZE+1);
+                    *ptep = (page->pra_vaddr/PGSIZE+1)<<8;
+                    free_page(page);
+          }
+          
+          tlb_invalidate(mm->pgdir, v);
+     }
+     return i;
+}
+```
+`swap_out()`则会根据页面置换算法选择出一个应该换出的页面并写入到磁盘中，同时将此页面释放。我们可以从函数实现看到找出需要换出的页面是由指定`swap_manager`的`swap_out_victim()`实现的，在这里我们探究FIFO算法，所以找到FIFO的`swap_out_victim()`
+```c++
+static int
+_fifo_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
+{
+     list_entry_t *head=(list_entry_t*) mm->sm_priv;
+         assert(head != NULL);
+     assert(in_tick==0);
+    list_entry_t* entry = list_prev(head);
+    if (entry != head) {
+        list_del(entry);
+        *ptr_page = le2page(entry, pra_page_link);
+    } else {
+        *ptr_page = NULL;
+    }
+    return 0;
+}
+```
+根据FIFO算法思想，在页面置换时，我们需要换出的是最先使用的页面（先入先出嘛），即最先加入到链表的节点对应的页面。在链表中，最先加入页面对应的节点就是头节点`head`的上一个节点，调用`list_prev()`即可。找到该节点后我们将其删除并获取被删除节点的页面对象，这里使用了`le2page`将链表节点转换为页面对象，并将其复制给`ptr_page`指向的指针。    
+随后我们需要将页面内容写入磁盘，该过程由以下两个函数实现：
+```c++
+int // 此函数封装了磁盘的读操作。
+swapfs_read(swap_entry_t entry, struct Page *page) {
+ return ide_read_secs(SWAP_DEV_NO, swap_offset(entry) * PAGE_NSECT, page2kva(page), PAGE_NSECT);
+}
+```
+```c++
+int // 此函数封装了磁盘的写操作。
+swapfs_write(swap_entry_t entry, struct Page *page) {
+ return ide_write_secs(SWAP_DEV_NO, swap_offset(entry) * PAGE_NSECT, page2kva(page), PAGE_NSECT);
+}
+```
