@@ -135,7 +135,11 @@ _fifo_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick
     return 0;
 }
 ```
-根据FIFO算法思想，在页面置换时，我们需要换出的是最先使用的页面（先入先出嘛），即最先加入到链表的节点对应的页面。在链表中，最先加入页面对应的节点就是头节点`head`的上一个节点，调用`list_prev()`即可。找到该节点后我们将其删除并获取被删除节点的页面对象，这里使用了`le2page`将链表节点转换为页面对象，并将其复制给`ptr_page`指向的指针。    
+根据FIFO算法思想，在页面置换时，我们需要换出的是最先使用的页面（先入先出嘛），即最先加入到链表的节点对应的页面。在链表中，最先加入页面对应的节点就是头节点`head`的上一个节点，调用`list_prev()`即可。找到该节点后我们将其删除并获取被删除节点的页面对象，这里使用了宏`le2page`将链表节点转换为页面对象，并将其复制给`ptr_page`指向的指针。   
+```c++
+#define le2page(le, member)                 \
+    to_struct((le), struct Page, member)
+``` 
 随后我们需要将页面内容写入磁盘，该过程由以下两个函数实现：
 ```c++
 int // 此函数封装了磁盘的读操作。
@@ -171,6 +175,26 @@ int page_insert(pde_t *pgdir, struct Page *page, uintptr_t la, uint32_t perm) {
 }
 ```
 `page_insert()`用于将虚拟地址和页面之间建立映射关系。   
+```c++
+int page_insert(pde_t *pgdir, struct Page *page, uintptr_t la, uint32_t perm) {
+    pte_t *ptep = get_pte(pgdir, la, 1);
+    if (ptep == NULL) {
+        return -E_NO_MEM;
+    }
+    page_ref_inc(page);
+    if (*ptep & PTE_V) {
+        struct Page *p = pte2page(*ptep);
+        if (p == page) {
+            page_ref_dec(page);
+        } else {
+            page_remove_pte(pgdir, la, ptep);
+        }
+    }
+    *ptep = pte_create(page2ppn(page), PTE_V | perm);
+    tlb_invalidate(pgdir, la);
+    return 0;
+}
+```
 首先，使用`get_pte()`获取页表项，然后判断页表项对应的页面和将要建立映射的页面是否相同。如果不同的话调用`page_remove_pte()`将页表项失效并调用`pte_create()`建立新的页表项并将其赋值给`get_pte()`找到的页表项的地址。
 > `page_remove_pte()`执行时会找到`pte`对应的页面，减少其引用，并将页面释放。
 > `pte_create()`直接根据物理页号进行偏移并对标志位进行设置。
