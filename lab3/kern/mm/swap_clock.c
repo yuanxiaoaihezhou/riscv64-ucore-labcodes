@@ -126,37 +126,6 @@ _clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tic
             curr_ptr = list_next(curr_ptr);
         }
 
-        // 移动 curr_ptr 到下一个页面
-        // curr_ptr = list_next(curr_ptr);
-        // if (curr_ptr == head) {
-        //     // 如果到达链表头，跳过，移动到下一个
-        //     curr_ptr = list_next(curr_ptr);
-        // }
-
-        // // 获取 curr_ptr 对应的页面
-        // page = le2page(curr_ptr, pra_page_link);
-
-        // // 获取页面对应的 PTE
-        // ptep = get_pte(mm->pgdir, page->pra_vaddr, 0);
-        // assert(ptep != NULL);
-
-        // // 检查 PTE 的访问位（Accessed bit，PTE_A）
-        // if ((*ptep & PTE_A)) {
-        //     // 如果访问过，清除访问位
-        //     *ptep &= ~PTE_A;
-        // } else {
-        //     // 未访问过，选择该页面作为换出页面
-        //     next = list_next(curr_ptr);
-        //     // 从链表中删除该页面
-        //     list_del(curr_ptr);
-        //     // 设置返回的页面指针
-        //     *ptr_page = page;
-        //     cprintf("curr_ptr %p\n", curr_ptr);
-        //     // 更新 curr_ptr 为下一个页面
-        //     curr_ptr = next;
-        //     cprintf("curr_ptr %p\n", curr_ptr);
-        //     return 0;
-        // }
     }
 
     return 0;
