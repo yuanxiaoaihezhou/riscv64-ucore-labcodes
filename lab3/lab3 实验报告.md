@@ -721,3 +721,94 @@ Clock页替换算法通过维护一个循环链表和`visited`标志位，优先
  - 内存浪费：一个大页会导致每个页面都很大，对于需要内存不多的程序来说会对内存产生很大的浪费。
  - 页面置换时性能降低：当需要将一个大页从物理内存换出时，会产生一次较大的I/O操作，相比分级页表性能更差些。
  - TLB失效的代价更高：如果程序访问的内存模式导致了大页的TLB失效，那么失效的代价会比小页模式下更高，因为大页失效会导致丢失的地址范围更大。
+
+## 扩展练习 Challenge：实现不考虑实现开销和效率的LRU页替换算法（需要编程）
+LRU 算法的核心思想是替换最近最少使用的页面（页面被访问的时间越久，优先被替换），通过一个链表和每个页面的访问状态 `visited` 来实现页面管理，链表中的每个节点对应一个页面。visited 值越大，表示页面未被访问的时间越长。
+以下是解释一些需要重点说明的代码部分：
+#### 1.`_lru_init_mm()`
+```c
+static int _lru_init_mm(struct mm_struct *mm)
+{
+    list_init(&pra_list_head);    
+    mm->sm_priv = &pra_list_head; // 初始化 mm 的私有数据指针
+    cprintf(" mm->sm_priv %x in fifo_init_mm\n", mm->sm_priv);
+    return 0;
+}
+```
+这一部分使用 `list_init` 初始化 `pra_list_head`，确保链表为空，且链表头指针正确设置,然后将链表头地址存入 `mm->sm_priv`，这是一个指向私有数据的通用指针，方便不同置换算法共享或切换,接下来打印调试信息，输出 `mm->sm_priv` 的值。
+#### 2.`_lru_map_swappable()`
+```c
+static int _lru_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int swap_in)
+{
+    _lru_check(mm);
+    list_entry_t *entry = &(page->pra_page_link);
+    assert(entry != NULL);
+    list_entry_t *head = (list_entry_t *)mm->sm_priv;
+    list_add(head, entry); // 将页面page插入到页面链表pra_list_head的末尾
+    page->visited = 0;     // 标记为0，表示最近刚被访问
+    return 0;
+}
+```
+这一部分首先调用 `_lru_check` 更新页面的访问状态，随后通过 `list_add` 将页面对应的链表节点插入到 `pra_list_head` 链表的末尾，确保新加入的页面被标记为最近访问。最后，将页面的 `visited` 字段设置为 0，表示刚被访问过。
+#### 3.`_lru_swap_out_victim()`
+```c
+static int _lru_swap_out_victim(struct mm_struct *mm, struct Page **ptr_page, int in_tick)
+{
+    _lru_check(mm);
+    list_entry_t *head = (list_entry_t *)mm->sm_priv;
+    assert(head != NULL);
+    assert(in_tick == 0);
+    
+    list_entry_t *entry = list_prev(head);
+    list_entry_t *pTobeDel = entry;
+    uint_t largest_visted = le2page(entry, pra_page_link)->visited;     //最长时间未被访问的page，比较的是visited
+    while (1)
+    {
+        // entry 转一圈，遍历结束
+        if (entry == head)
+        {
+            break;
+        }
+        if (le2page(entry, pra_page_link)->visited > largest_visted)
+        {
+            largest_visted = le2page(entry, pra_page_link)->visited;
+            pTobeDel = entry;
+        }
+        entry = list_prev(entry);
+    }
+    list_del(pTobeDel);
+    *ptr_page = le2page(pTobeDel, pra_page_link);
+    cprintf("curr_ptr %p\n", pTobeDel);
+    return 0;
+}
+```
+这一部分通过遍历链表 `pra_list_head`，找到 `visited` 值最大的页面，即最早被访问的页面作为换出的受害者。`list_prev` 用于逆向遍历链表，`le2page` 将链表节点转化为对应的页面结构。找到目标页面后，使用 `list_del` 将其从链表中移除，并将其地址存储到 `ptr_page` 指针中返回。
+#### 4.`_lru_check()`
+```c
+static int _lru_check(struct mm_struct *mm)
+{
+    cprintf("\n-------------begin LRU check---------------------\n");
+    list_entry_t *head = (list_entry_t *)mm->sm_priv;   // 头指针
+    assert(head != NULL);
+    list_entry_t *entry = head;
+    while ((entry = list_prev(entry)) != head)
+    {
+        struct Page *entry_page = le2page(entry, pra_page_link);
+        pte_t *tmp_pte = get_pte(mm->pgdir, entry_page->pra_vaddr, 0);
+        if (*tmp_pte & PTE_A)  // 如果近期被访问过，visited 清零
+        {
+            entry_page->visited = 0;
+            *tmp_pte = *tmp_pte ^ PTE_A; // 清除访问位
+        }
+        else
+        {
+            // 未被访问就加一
+            entry_page->visited++;
+        }
+        cprintf("the visited is %d\n", entry_page->visited);
+    }
+    cprintf("-------------end LRU check---------------------\n\n");
+}
+```
+这一部分遍历页面链表，检查页面的访问状态。每次遍历一个页面,获取其对应的页表项，并检查访问位 `PTE_A`。如果 `PTE_A` 位被设置，清除该位并将页面的 `visited` 值重置为 0。
+否则，递增页面的 `visited` 值，表示该页面距离上次访问的时间更长。 最后打印每个页面值以及检查完成的调试信息。
