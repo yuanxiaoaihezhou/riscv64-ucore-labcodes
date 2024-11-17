@@ -33,7 +33,7 @@ static int pgfault_handler(struct trapframe *tf) {
 随后我们调用`get_pte()`函数。
 ```c++
 pte_t *get_pte(pde_t *pgdir, uintptr_t la, bool create) {
-    pde_t *pdep1 = &pgdir[PDX1(la)]; // 获取二级页表目录
+    pde_t *pdep1 = &pgdir[PDX1(la)]; // 获取一级页表目录
     if (!(*pdep1 & PTE_V)) {
         struct Page *page;
         if (!create || (page = alloc_page()) == NULL) {
@@ -44,7 +44,7 @@ pte_t *get_pte(pde_t *pgdir, uintptr_t la, bool create) {
         memset(KADDR(pa), 0, PGSIZE);
         *pdep1 = pte_create(page2ppn(page), PTE_U | PTE_V);
     }
-    pde_t *pdep0 = &((pde_t *)KADDR(PDE_ADDR(*pdep1)))[PDX0(la)];  // 找到一级页表目录项
+    pde_t *pdep0 = &((pde_t *)KADDR(PDE_ADDR(*pdep1)))[PDX0(la)];  // 找到二级页表目录项
     if (!(*pdep0 & PTE_V)) {
     	struct Page *page;
     	if (!create || (page = alloc_page()) == NULL) {
