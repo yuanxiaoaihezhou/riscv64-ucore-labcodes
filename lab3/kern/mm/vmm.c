@@ -393,11 +393,11 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             cprintf("pgdir_alloc_page in do_pgfault failed\n");
             goto failed;
         }
-        // 将页面标记为可交换，并加入到交换管理器
-        if (swap_init_ok) {
-            swap_map_swappable(mm, addr, page, 1);
-            page->pra_vaddr = addr;
-        }
+        // // 将页面标记为可交换，并加入到交换管理器
+        // if (swap_init_ok) {
+        //     swap_map_swappable(mm, addr, page, 1);
+        //     page->pra_vaddr = addr;
+        // }
     } else {
         /*LAB3 EXERCISE 3: YOUR CODE 2213524
         * 请你根据以下信息提示，补充函数
