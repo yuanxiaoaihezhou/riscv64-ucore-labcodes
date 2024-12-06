@@ -86,7 +86,7 @@ static struct proc_struct *
 alloc_proc(void) {
     struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
     if (proc != NULL) {
-    //LAB4:EXERCISE1 YOUR CODE
+    //LAB4:EXERCISE1 YOUR CODE 2213524
     /*
      * below fields in proc_struct need to be initialized
      *       enum proc_state state;                      // Process state
@@ -102,6 +102,46 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
+
+    // 初始化进程状态为未初始化
+        proc->state = PROC_UNINIT;
+
+        // 进程ID暂时设为-1，稍后由do_fork分配
+        proc->pid = -1;
+
+        // 运行次数初始化为0
+        proc->runs = 0;
+
+        // 内核栈地址初始化为0，稍后由do_fork设置
+        proc->kstack = 0;
+
+        // 需要重新调度标志初始化为false
+        proc->need_resched = 0;
+
+        // 父进程指针设为 NULL
+        proc->parent = NULL;
+
+        // 内存管理结构体指针初始化为NULL，稍后由do_fork复制或共享
+        proc->mm = NULL;
+
+        // 上下文结构体清零
+        memset(&(proc->context), 0, sizeof(struct context));
+
+        // 陷阱帧指针初始化为NULL，稍后由copy_thread设置
+        proc->tf = NULL;
+
+        // 页目录表基地址初始化为ucore内核表的起始地址
+        proc->cr3 = boot_cr3;
+
+        // 进程标志初始化为0
+        proc->flags = 0;
+
+        // 进程名称初始化为空字符串
+        memset(proc->name, 0, PROC_NAME_LEN);
+
+        // // 初始化进程链表和哈希表的链表链接
+        // list_init(&(proc->list_link));
+        // list_init(&(proc->hash_link));
 
 
     }
@@ -163,7 +203,7 @@ get_pid(void) {
 void
 proc_run(struct proc_struct *proc) {
     if (proc != current) {
-        // LAB4:EXERCISE3 YOUR CODE
+        // LAB4:EXERCISE3 YOUR CODE 2213524
         /*
         * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
         * MACROs or Functions:
@@ -172,6 +212,20 @@ proc_run(struct proc_struct *proc) {
         *   lcr3():                   Modify the value of CR3 register
         *   switch_to():              Context switching between two processes
         */
+
+        // 禁用中断，保存当前中断状态
+        bool intr_flag;
+        struct proc_struct *pre=current;
+        local_intr_save(intr_flag);
+        {
+            //将当前运行的进程设置为proc
+            current=proc;
+            //切换到新进程的页目录表
+            lcr3(proc->cr3);
+            //进行上下文切换，从当前进程切换到新进程
+            switch_to(&(pre->context),&(proc->context));
+        }
+        local_intr_restore(intr_flag);
        
     }
 }
@@ -273,7 +327,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
         goto fork_out;
     }
     ret = -E_NO_MEM;
-    //LAB4:EXERCISE2 YOUR CODE
+    //LAB4:EXERCISE2 YOUR CODE 2213524
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -298,6 +352,43 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     //    5. insert proc_struct into hash_list && proc_list
     //    6. call wakeup_proc to make the new child process RUNNABLE
     //    7. set ret vaule using child proc's pid
+
+    // 1. 调用 alloc_proc 分配一个新的 proc_struct
+    proc = alloc_proc();
+    if (proc == NULL) {
+        goto fork_out;
+    }
+
+    // 2. 调用 setup_kstack 分配内核栈
+    if (setup_kstack(proc) != 0) {
+        goto bad_fork_cleanup_kstack;
+    }
+
+    // 3. 调用 copy_mm 复制或共享内存管理信息
+    //    对于内核线程，不需要复制内存管理信息，因此此处直接调用 copy_mm
+    if (copy_mm(clone_flags, proc) != 0) {
+        goto bad_fork_cleanup_proc;
+    }
+
+    // 4. 调用 copy_thread 设置陷阱帧和上下文
+    copy_thread(proc, stack, tf);
+
+    // 5. 将新进程插入到哈希表和全局进程链表中
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        proc->pid=get_pid();
+        hash_proc(proc);
+        //加在proc_list之后
+        list_add(&proc_list,&(proc->list_link));
+    }
+    local_intr_restore(intr_flag);
+
+    // 6. 唤醒新进程，使其可运行
+    wakeup_proc(proc);
+
+    // 7. 设置返回值为新进程的 PID
+    ret=proc->pid;
 
     
 
