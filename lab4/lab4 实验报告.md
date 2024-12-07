@@ -126,4 +126,89 @@ get_pid(void) {
 
 - 在本实验的执行过程中，创建且运行了几个内核线程？
 
+## Answer
+
+编写好的 `proc_run` 函数如下：
+
+```c
+void
+proc_run(struct proc_struct *proc) {
+    if (proc != current) {
+        // LAB4:EXERCISE3 YOUR CODE 2213524
+        /*
+        * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
+        * MACROs or Functions:
+        *   local_intr_save():        Disable interrupts
+        *   local_intr_restore():     Enable Interrupts
+        *   lcr3():                   Modify the value of CR3 register
+        *   switch_to():              Context switching between two processes
+        */
+
+        // 禁用中断，保存当前中断状态
+        bool intr_flag;
+        struct proc_struct *pre=current;
+        local_intr_save(intr_flag);
+        {
+            //将当前运行的进程设置为proc
+            current=proc;
+            //切换到新进程的页目录表
+            lcr3(proc->cr3);
+            //进行上下文切换，从当前进程切换到新进程
+            switch_to(&(pre->context),&(proc->context));
+        }
+        local_intr_restore(intr_flag);
+       
+    }
+}
+```
+
+### 编写思路
+
+在编写 `proc_run` 函数时，主要目标是实现进程上下文的安全、高效切换。以下是详细的设计与实现思路：
+
+1. **检查进程相同性**：
+    - 首先判断要切换的进程 `proc` 是否与当前进程 `current` 相同。
+    - 如果相同，则无需进行任何操作，直接返回。这一步骤避免了不必要的上下文切换，提高了系统效率。
+
+2. **禁用中断**：
+    - 使用 `local_intr_save(intr_flag)` 宏禁用当前 CPU 的中断，并保存之前的中断状态到 `intr_flag`。
+    - 禁用中断的目的是确保上下文切换过程的原子性，防止在切换过程中被中断打断，导致系统状态不一致或数据结构损坏。
+
+3. **切换当前进程**：
+    - 将全局指针 `current` 更新为要运行的进程 `proc`。
+    - 这一步骤确保了系统能正确跟踪当前正在运行的进程。
+
+4. **切换页表**：
+    - 使用 `lcr3(proc->cr3)` 函数将 CR3 寄存器设置为新进程的页目录表基地址。
+    - 切换页表是为了切换到新进程的地址空间，确保新进程能够访问其独立的虚拟内存空间。
+
+5. **上下文切换**：
+    - 调用 `switch_to(&(pre->context), &(proc->context))` 函数，实现从当前进程 `pre` 到新进程 `proc` 的上下文切换。
+    - `switch_to` 函数负责保存当前进程的寄存器状态，并恢复新进程的寄存器状态，完成实际的 CPU 控制权切换。
+
+6. **恢复中断**：
+    - 使用 `local_intr_restore(intr_flag)` 宏恢复之前保存的中断状态。
+    - 恢复中断后，系统可以继续响应中断和其他事件。
+
+
+### 回答问题
+
+**在本实验的执行过程中，创建且运行了几个内核线程？**
+
+**Answer：**
+
+在本实验的执行过程中，创建且运行了 **两个** 内核线程：
+
+1. **空闲进程 (`idleproc`)**：
+    - 在系统启动时，`proc_init` 函数调用 `alloc_proc` 分配并初始化了空闲进程 `idleproc`。
+    - `idleproc` 的 PID 通常被设定为 `0`，是系统中永远存在的进程，用于在没有其他可运行进程时占用 CPU。
+    - `idleproc` 通过调用 `cpu_idle` 函数，进入无限循环，等待调度器调度其他进程。
+
+2. **初始化进程 (`initproc`)**：
+    - 在 `proc_init` 函数中，通过调用 `kernel_thread(init_main, "Hello world!!", 0)` 创建了初始化进程 `initproc`。
+    - `initproc` 的 PID 被设定为 `1`，是系统启动后创建的第一个内核线程。
+    - `initproc` 负责进一步创建和管理用户态主线程或其他内核线程，并执行系统初始化任务。
+
+
+
 ## 扩展练习：说明语句`local_intr_save(intr_flag);....local_intr_restore(intr_flag);`是如何实现开关中断的？
