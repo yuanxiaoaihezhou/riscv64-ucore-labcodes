@@ -126,10 +126,7 @@ get_pid(void) {
 
 - 在本实验的执行过程中，创建且运行了几个内核线程？
 
-## 扩展练习：说明语句`local_intr_save(intr_flag);....local_intr_restore(intr_flag);`是如何实现开关中断的？# lab4 进程管理
-
-## 扩展练习 Challenge：
-说明语句`local_intr_save(intr_flag);....local_intr_restore(intr_flag);`是如何实现开关中断的？
+## 扩展练习：说明语句`local_intr_save(intr_flag);....local_intr_restore(intr_flag);`是如何实现开关中断的？
 
 ## Answer：
 我们先看相关的实现：
