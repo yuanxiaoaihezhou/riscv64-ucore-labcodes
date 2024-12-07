@@ -8,6 +8,159 @@
 
 请说明`proc_struct`中`struct context context`和`struct trapframe *tf`成员变量含义和在本实验中的作用是啥？（提示通过看代码和编程调试可以判断出来）
 
+
+## Answer
+
+`alloc_proc` 函数编写如下：
+
+```c
+static struct proc_struct *
+alloc_proc(void) {
+    struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
+    if (proc != NULL) {
+    //LAB4:EXERCISE1 YOUR CODE 2213524
+    /*
+     * below fields in proc_struct need to be initialized
+     *       enum proc_state state;                      // Process state
+     *       int pid;                                    // Process ID
+     *       int runs;                                   // the running times of Proces
+     *       uintptr_t kstack;                           // Process kernel stack
+     *       volatile bool need_resched;                 // bool value: need to be rescheduled to release CPU?
+     *       struct proc_struct *parent;                 // the parent process
+     *       struct mm_struct *mm;                       // Process's memory management field
+     *       struct context context;                     // Switch here to run process
+     *       struct trapframe *tf;                       // Trap frame for current interrupt
+     *       uintptr_t cr3;                              // CR3 register: the base addr of Page Directroy Table(PDT)
+     *       uint32_t flags;                             // Process flag
+     *       char name[PROC_NAME_LEN + 1];               // Process name
+     */
+
+    // 初始化进程状态为未初始化
+        proc->state = PROC_UNINIT;
+
+        // 进程ID暂时设为-1，稍后由do_fork分配
+        proc->pid = -1;
+
+        // 运行次数初始化为0
+        proc->runs = 0;
+
+        // 内核栈地址初始化为0，稍后由do_fork设置
+        proc->kstack = 0;
+
+        // 需要重新调度标志初始化为false
+        proc->need_resched = 0;
+
+        // 父进程指针设为 NULL
+        proc->parent = NULL;
+
+        // 内存管理结构体指针初始化为NULL，稍后由do_fork复制或共享
+        proc->mm = NULL;
+
+        // 上下文结构体清零
+        memset(&(proc->context), 0, sizeof(struct context));
+
+        // 陷阱帧指针初始化为NULL，稍后由copy_thread设置
+        proc->tf = NULL;
+
+        // 页目录表基地址初始化为ucore内核表的起始地址
+        proc->cr3 = boot_cr3;
+
+        // 进程标志初始化为0
+        proc->flags = 0;
+
+        // 进程名称初始化为空字符串
+        memset(proc->name, 0, PROC_NAME_LEN);
+
+    }
+    return proc;
+}
+```
+
+### 设计与实现过程
+
+在实现 `alloc_proc` 函数时，主要目标是确保新分配的 `proc_struct` 结构体具备所有必要的初始状态和资源，以便后续的进程创建和管理能够顺利进行。以下是具体的设计与实现步骤：
+
+1. **内存分配：**
+   - 使用 `kalloc()` 函数分配一块内存，用于存储新的 `proc_struct` 结构体。
+   - 如果内存分配失败，函数返回 `NULL`，表示无法创建新进程。
+
+2. **初始化进程状态为未初始化**
+   - 设置进程状态`proc->state`为 `PROC_UNINIT`，表示进程尚未初始化完毕。
+
+3. **PID 初始化：**
+   - 将 `pid` 初始化为 `-1`，表示尚未分配有效的 PID。PID 将在 `do_fork` 函数中通过 `get_pid()` 函数分配。
+
+4. **运行次数初始化：**
+   - 将 `runs` 字段初始化为 `0`，用于记录进程被调度执行的次数。
+
+5. **内核栈指针初始化：**
+   - 将 `kstack` 初始化为 `NULL`。内核栈将在 `do_fork` 函数中通过 `setup_kstack()` 函数分配。
+
+6. **重新调度标志初始化：**
+   - 将 `need_resched` 字段设置为 `false`，表示当前进程不需要立即进行重新调度。
+
+7. **父进程指针初始化：**
+   - 将 `parent` 指针初始化为 `NULL`。父进程将在 `do_fork` 函数中设置为当前进程。
+
+8. **内存管理结构指针初始化：**
+   - 将 `mm` 指针初始化为 `NULL`。内存管理结构将在 `do_fork` 函数中通过 `copy_mm()` 函数设置。
+
+9. **上下文结构初始化：**
+   - 使用 `memset` 将 `context` 结构体清零，确保所有寄存器状态都有已知的初始值。
+
+10. **陷阱帧指针初始化：**
+    - 将 `tf` 指针初始化为 `NULL`。陷阱帧将在 `do_fork` 函数中设置。
+
+11. **页目录表基地址初始化：**
+    - 将 `cr3` 初始化为 `boot_cr3`。即ucore内核表的起始地址。
+
+12. **进程标志初始化：**
+    - 将 `flags` 字段初始化为 `0`，表示进程没有任何特殊标志。
+
+13. **进程名称初始化：**
+    - 使用 `memset` 将进程名称初始化为空字符串。实际名称将在进程创建时设置。
+
+
+通过以上步骤，`alloc_proc` 函数确保新创建的 `proc_struct` 结构体具备所有必要的初始状态，为后续的进程创建和管理打下基础。
+
+### 回答问题
+
+**请说明 `proc_struct` 中 `struct context context` 和 `struct trapframe *tf` 成员变量的含义及在本实验中的作用。**
+
+**回答：**
+
+在 `proc_struct` 结构体中，`struct context context` 和 `struct trapframe *tf` 是两个关键的成员变量，分别用于保存和恢复进程的执行状态。以下是对它们的详细解释：
+
+1. **`struct context context`**
+
+   - **含义：**
+     - `context` 结构体用于保存进程在 CPU 上执行时的寄存器状态。它包含了**被调度进程**在上下文切换时需要保存的所有必要寄存器（如 `ra`、`sp`、`s0`~`s11` 等）。
+     - 具体而言，`context` 通常包括**被调用者保存寄存器（callee-saved registers）**，这些寄存器在函数调用过程中需要被保存和恢复，以确保进程能够在被切换回来时继续正确执行。
+
+   - **作用：**
+     - **上下文切换**：在**进程调度**过程中，当操作系统决定将 CPU 的控制权从当前进程切换到另一个进程时，`context` 结构体中的寄存器状态会被保存到当前进程的 `context` 中，并从即将运行的进程的 `context` 中恢复寄存器状态。这样可以确保每个进程在被切换回来时，能够从上次被切换出去的位置继续执行。
+
+   - **在本实验中的作用：**
+     - 在 `do_fork` 函数中，通过调用 `copy_thread()` 函数，将当前进程的 `context` 复制到新进程的 `context` 中，确保新进程在被调度时能够拥有独立的执行环境。
+     - 在 `proc_run` 函数中，通过调用 `switch_to()` 函数，使用 `context` 实现实际的上下文切换，将 CPU 的控制权从一个进程转移到另一个进程。
+
+2. **`struct trapframe *tf`**
+
+   - **含义：**
+     - `trapframe` 结构体用于保存进程在陷入内核态（如发生系统调用、中断、异常等）时的寄存器状态和其他上下文信息。它包含了通用寄存器、程序计数器 (`epc`)、状态寄存器 (`status`)、以及其他与`trap`相关的信息。
+     - `tf` 是一个指针，指向当前进程的 `trapframe`，用于在陷阱处理过程中保存和恢复进程的状态。
+
+   - **作用：**
+     - **中断处理**：当进程发生系统调用或中断时，处理器会将当前执行状态保存到 `trapframe` 中，然后转移到内核态进行相应的处理。处理完成后，通过 `trapframe` 恢复进程的执行状态，使其能够继续执行。
+     - **进程创建与初始化**：在 `do_fork` 函数中，通过设置新进程的 `trapframe`，确保新进程在被调度时能够正确启动，执行指定的函数。
+
+   - **在本实验中的作用：**
+     - 在 `kernel_thread` 函数中，初始化 `trapframe` 并通过 `do_fork` 创建新进程时，`tf` 被用于设置新进程的初始寄存器状态，包括要执行的函数指针和参数。
+     - 在 `do_fork` 函数中，通过调用 `copy_thread()` 函数，将父进程的 `trapframe` 复制到新进程的 `trapframe` 中，确保新进程能够从正确的入口点开始执行。
+
+
+
+
 ## 练习2：为新创建的内核线程分配资源（需要编码）
 创建一个内核线程需要分配和设置好很多资源。`kernel_thread`函数通过调用`do_fork`函数完成具体内核线程的创建工作。`do_kernel`函数会调用`alloc_proc`函数来分配并初始化一个进程控制块，但`alloc_proc`只是找到了一小块内存用以记录进程的必要信息，并没有实际分配这些资源。ucore一般通过`do_fork`实际创建新的内核线程。`do_fork`的作用是，创建当前内核线程的一个副本，它们的执行上下文、代码、数据都一样，但是存储位置不同。因此，我们实际需要"fork"的东西就是`stack`和`trapframe`。在这个过程中，需要给新内核线程分配资源，并且复制原进程的状态。你需要完成在`kern/process/proc.c`中的`do_fork`函数中的处理过程。它的大致执行步骤包括：
 
