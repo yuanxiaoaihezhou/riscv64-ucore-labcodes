@@ -458,6 +458,21 @@ do_pgfault(struct mm_struct *mm, uint_t error_code, uintptr_t addr) {
             //map of phy addr <--->
             //logical addr
             //(3) make the page swappable.
+
+            // (1) Load the content from disk into a new page
+            if (swap_in(mm, addr, &page) != 0) {
+                cprintf("swap_in in do_pgfault failed\n");
+                goto failed;
+            }
+            // (2) Insert the page into the page table with correct permissions
+            if (page_insert(mm->pgdir, page, addr, perm) != 0) {
+                cprintf("page_insert in do_pgfault failed\n");
+                free_page(page);
+                goto failed;
+            }
+            // (3) Mark the page as swappable
+            swap_map_swappable(mm, addr, page, 1);
+            
             page->pra_vaddr = addr;
         } else {
             cprintf("no swap_init_ok but ptep is %x, failed\n", *ptep);
