@@ -706,6 +706,15 @@ load_icode(unsigned char *binary, size_t size) {
      *          hint: check meaning of SPP, SPIE in SSTATUS, use them by SSTATUS_SPP, SSTATUS_SPIE(defined in risv.h)
      */
 
+    // 3.1 设置用户栈指针
+    tf->gpr.sp=USTACKTOP;
+
+    // 3.2 设置程序计数器到用户程序的入口点，elf->e_entry是程序入口地址,定义在elf.h中
+    tf->epc=elf->e_entry;
+
+    // 3.3 设置状态寄存器
+    // 将 SPP 清零（用户模式），设置 SPIE 位以启用中断
+    tf->status=(sstatus|SSTATUS_SPIE)&(~SSTATUS_SPP);
 
     ret = 0;
 out:
