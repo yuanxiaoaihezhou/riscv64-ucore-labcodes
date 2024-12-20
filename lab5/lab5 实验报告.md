@@ -378,6 +378,321 @@ ret = page_insert(to, npage, start, perm);
 请分析fork/exec/wait/exit的执行流程。重点关注哪些操作是在用户态完成，哪些是在内核态完成？内核态与用户态程序是如何交错执行的？内核态执行结果是如何返回给用户程序的？
 请给出ucore中一个用户态进程的执行状态生命周期图（包执行状态，执行状态之间的变换关系，以及产生变换的事件或函数调用）。（字符方式画即可）
 执行：make grade。如果所显示的应用程序检测都输出ok，则基本正确。（使用的是qemu-1.0.1）
+### fork流程：
+fork用于创建一个子进程，在用户态中，用户程序会调用 fork()函数，而这个函数会最终调用 sys_fork 系统接口。进入内核态后，其内核实现如下：
+```c++
+int sys_fork(uint64_t arg[]) {
+    struct trapframe *tf = current->tf;
+    uintptr_t stack = tf->gpr.sp;
+    return do_fork(0, stack, tf);
+}
+
+```
+它接下来会调用 do_fork 执行核心逻辑：
+```c++
+int
+do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
+    int ret = -E_NO_FREE_PROC;
+    struct proc_struct *proc;
+    if (nr_process >= MAX_PROCESS) {
+        goto fork_out;
+    }
+    ret = -E_NO_MEM;
+   
+   // 1. 调用 alloc_proc 分配一个新的 proc_struct
+    if ((proc = alloc_proc()) == NULL) {
+        goto fork_out;
+    }
+
+    // 2. 设置子进程的父进程指针为当前进程，并确保父进程的 wait_state 为 0
+    proc->parent = current;
+    // current->wait_state = 0;
+    assert(current->wait_state==0);
+
+    // 3. 调用 setup_kstack 为子进程分配内核栈
+    if (setup_kstack(proc) != 0) {
+        // ret = -E_NO_MEM;
+        goto bad_fork_cleanup_kstack;
+    }
+
+    // 4. 调用 copy_mm 复制或共享内存管理结构
+    if (copy_mm(clone_flags, proc) != 0) {
+        // ret = -E_NO_MEM;
+        goto bad_fork_cleanup_proc;
+    }
+
+    // 5. 调用 copy_thread 复制线程上下文和陷阱帧
+    copy_thread(proc, stack, tf);
+
+    // 6. 调用 get_pid 分配一个唯一的 PID 给子进程，将子进程插入到哈希表和进程链表中，并设置进程间关系
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        proc->pid=get_pid();
+        hash_proc(proc);
+        set_links(proc);
+    }
+    local_intr_restore(intr_flag);
+
+    
+
+    // 7. 唤醒子进程
+    // proc->state = PROC_RUNNABLE;
+    wakeup_proc(proc);
+
+    // 8. 设置返回值为子进程的 PID
+    ret = proc->pid;
+ 
+fork_out:
+    return ret;
+
+bad_fork_cleanup_kstack:
+    put_kstack(proc);
+bad_fork_cleanup_proc:
+    kfree(proc);
+    goto fork_out;
+}
+```
+其结果会返回用户态。父进程收到子进程的 PID，而子进程收到返回值 0。
+### exec流程：
+exec 用于加载新的可执行程序替换当前进程的内存映像。一开始在用户态的过程与上一个类似，用户程序调用的execve，会通过封装的系统调用 sys_exec 进入内核，其实现为：
+```c++
+int sys_exec(uint64_t arg[]) {
+    const char *name = (const char *)arg[0];
+    size_t len = (size_t)arg[1];
+    unsigned char *binary = (unsigned char *)arg[2];
+    size_t size = (size_t)arg[3];
+    return do_execve(name, len, binary, size);
+}
+```
+而在内核中其核心为do_execve()函数，它通过加载一个新的二进制可执行文件来替换当前进程的内存空间，并为新的程序设置执行环境。具体而言，它会先检查当前进程所分配的内存区域、进行一些资源的回收等。然后调用 load_icode 函数加载新的 ELF 二进制文件，它会根据ELFheader分配特定位置的虚拟内存，并加载代码与数据至特定的内存地址，最后分配堆栈并设置trapframe属性。最后使用 set_proc_name 函数更新当前进程的名称。
+```c++
+int
+do_execve(const char *name, size_t len, unsigned char *binary, size_t size) {
+    struct mm_struct *mm = current->mm;
+    if (!user_mem_check(mm, (uintptr_t)name, len, 0)) {
+        return -E_INVAL;
+    }
+    if (len > PROC_NAME_LEN) {
+        len = PROC_NAME_LEN;
+    }
+
+    char local_name[PROC_NAME_LEN + 1];
+    memset(local_name, 0, sizeof(local_name));
+    memcpy(local_name, name, len);
+
+    if (mm != NULL) {
+        cputs("mm != NULL");
+        lcr3(boot_cr3);
+        if (mm_count_dec(mm) == 0) {
+            exit_mmap(mm);
+            put_pgdir(mm);
+            mm_destroy(mm);
+        }
+        current->mm = NULL;
+    }
+    int ret;
+    if ((ret = load_icode(binary, size)) != 0) {
+        goto execve_exit;
+    }
+    set_proc_name(current, local_name);
+    return 0;
+
+execve_exit:
+    do_exit(ret);
+    panic("already exit: %e.\n", ret);
+}
+```
+函数释放除了PCB以外原进程所有的资源，只原进程的PID、原进程的属性、原进程与其他进程之间的关系等等。
+最后内核返回 0 表示执行成功。在用户态中，当前进程的代码段、数据段被替换为新程序，继续执行新程序的入口点。
+### wait流程：
+wait 用于等待子进程结束并回收其资源。用户程序首先调用 wait()，通过 sys_wait 进入内核。
+内核态中 sys_wait 的实现为：
+```c++
+int sys_wait(uint64_t arg[]) {
+    int pid = (int)arg[0];
+    int *store = (int *)arg[1];
+    return do_wait(pid, store);
+}
+```
+核心部分还是do_wait函数，它会使某个进程一直等待，直到特定子进程退出后，才会进行资源回收和函数返回。具体而言，函数遍历当前进程的子进程，检查是否有子进程处于 PROC_ZOMBIE 状态。如果存在，则清理子进程的资源，并返回子进程的退出码。如果不存在，则设置父进程为 PROC_SLEEPING 状态，等待子进程状态变化。
+```c++
+int
+do_wait(int pid, int *code_store) {
+    struct mm_struct *mm = current->mm;
+    if (code_store != NULL) {
+        if (!user_mem_check(mm, (uintptr_t)code_store, sizeof(int), 1)) {
+            return -E_INVAL;
+        }
+    }
+
+    struct proc_struct *proc;
+    bool intr_flag, haskid;
+repeat:
+    haskid = 0;
+    if (pid != 0) {
+        proc = find_proc(pid);
+        if (proc != NULL && proc->parent == current) {
+            haskid = 1;
+            if (proc->state == PROC_ZOMBIE) {
+                goto found;
+            }
+        }
+    }
+    else {
+        proc = current->cptr;
+        for (; proc != NULL; proc = proc->optr) {
+            haskid = 1;
+            if (proc->state == PROC_ZOMBIE) {
+                goto found;
+            }
+        }
+    }
+    if (haskid) {
+        current->state = PROC_SLEEPING;
+        current->wait_state = WT_CHILD;
+        schedule();
+        if (current->flags & PF_EXITING) {
+            do_exit(-E_KILLED);
+        }
+        goto repeat;
+    }
+    return -E_BAD_PROC;
+
+found:
+    if (proc == idleproc || proc == initproc) {
+        panic("wait idleproc or initproc.\n");
+    }
+    if (code_store != NULL) {
+        *code_store = proc->exit_code;
+    }
+    local_intr_save(intr_flag);
+    {
+        unhash_proc(proc);
+        remove_links(proc);
+    }
+    local_intr_restore(intr_flag);
+    put_kstack(proc);
+    kfree(proc);
+    return 0;
+}
+```
+返回用户态中，wait会返回子进程的退出码。
+### exit流程：
+exit 用于结束当前进程，前面从用户态进入内核态的过程与前三个类似，这里不再赘述。主要需要介绍do_exit的实现：
+```c++
+int
+do_exit(int error_code) {
+    if (current == idleproc) {
+        panic("idleproc exit.\n");
+    }
+    if (current == initproc) {
+        panic("initproc exit.\n");
+    }
+    struct mm_struct *mm = current->mm;
+    if (mm != NULL) {
+        lcr3(boot_cr3);
+        if (mm_count_dec(mm) == 0) {
+            exit_mmap(mm);
+            put_pgdir(mm);
+            mm_destroy(mm);
+        }
+        current->mm = NULL;
+    }
+    current->state = PROC_ZOMBIE;
+    current->exit_code = error_code;
+    bool intr_flag;
+    struct proc_struct *proc;
+    local_intr_save(intr_flag);
+    {
+        proc = current->parent;
+        if (proc->wait_state == WT_CHILD) {
+            wakeup_proc(proc);
+        }
+        while (current->cptr != NULL) {
+            proc = current->cptr;
+            current->cptr = proc->optr;
+    
+            proc->yptr = NULL;
+            if ((proc->optr = initproc->cptr) != NULL) {
+                initproc->cptr->yptr = proc;
+            }
+            proc->parent = initproc;
+            initproc->cptr = proc;
+            if (proc->state == PROC_ZOMBIE) {
+                if (initproc->wait_state == WT_CHILD) {
+                    wakeup_proc(initproc);
+                }
+            }
+        }
+    }
+    local_intr_restore(intr_flag);
+    schedule();
+    panic("do_exit will not return!! %d.\n", current->pid);
+}
+```
+当进程终止时，需回收其所有内存（除PCB），设置状态为PROC_ZOMBIE并保存退出码。如果有父进程，则唤醒其回收PCB；若无父进程，将子进程的父进程设为initproc以负责资源回收。最后触发调度机制，父进程调度后可立即回收该进程的PCB。
+
+值得一提的是，这一步就无法返回用户态了，因为进程资源都会被回收。
+### 系统调用：
+内核部分通过syscall为用户程序提供内核服务。用户态中实现如下：
+```c++
+static inline int
+syscall(int64_t num, ...) {
+    va_list ap;
+    va_start(ap, num);
+    uint64_t a[MAX_ARGS];
+    int i, ret;
+    for (i = 0; i < MAX_ARGS; i ++) {
+        a[i] = va_arg(ap, uint64_t);
+    }
+    va_end(ap);
+
+    asm volatile (
+        "ld a0, %1\n"
+        "ld a1, %2\n"
+        "ld a2, %3\n"
+        "ld a3, %4\n"
+        "ld a4, %5\n"
+    	"ld a5, %6\n"
+        "ecall\n"
+        "sd a0, %0"
+        : "=m" (ret)
+        : "m"(num), "m"(a[0]), "m"(a[1]), "m"(a[2]), "m"(a[3]), "m"(a[4])
+        :"memory");
+    return ret;
+}
+```
+这个函数会设置%eax, %edx, %ecx, %ebx, %edi, %esi五个寄存器的值分别为调用号、参数1、参数2、参数3、参数4、参数5，然后执行int中断进入中断处理例程。
+
+在中断处理中，程序会根据中断号，执行内核中的syscall函数，它会取出六个寄存器的值，并根据系统调用号来执行不同的系统调用：
+```c++
+void
+syscall(void) {
+    struct trapframe *tf = current->tf;
+    uint64_t arg[5];
+    int num = tf->gpr.a0;
+    if (num >= 0 && num < NUM_SYSCALLS) {
+        if (syscalls[num] != NULL) {
+            arg[0] = tf->gpr.a1;
+            arg[1] = tf->gpr.a2;
+            arg[2] = tf->gpr.a3;
+            arg[3] = tf->gpr.a4;
+            arg[4] = tf->gpr.a5;
+            tf->gpr.a0 = syscalls[num](arg);
+            return ;
+        }
+    }
+    print_trapframe(tf);
+    panic("undefined syscall %d, pid = %d, name = %s.\n",
+            num, current->pid, current->name);
+}
+```
+结束后，程序通过之前保留的trapframe返回用户态。
+### 执行状态分析：
+在进程管理中，fork会将子进程状态设为PROC_RUNNABLE，而当前进程状态保持不变；exec不会改变当前进程状态，但会替换其内存空间中的数据和代码；wait会检查子进程状态，若有PROC_ZOMBIE子进程则回收并返回，否则当前进程进入PROC_SLEEPING状态等待子进程唤醒；exit将当前进程状态设置为PROC_ZOMBIE，唤醒父进程使其变为PROC_RUNNABLE，并主动释放CPU。
+
+![生命周期图](RUNNING.jpg)
 
 ## Challenge：实现 Copy on Write （COW）机制
 
