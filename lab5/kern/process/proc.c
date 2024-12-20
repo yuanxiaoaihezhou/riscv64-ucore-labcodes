@@ -895,6 +895,8 @@ kernel_execve(const char *name, unsigned char *binary, size_t size) {
 
 #define KERNEL_EXECVE2(x, xstart, xsize)        __KERNEL_EXECVE2(x, xstart, xsize)
 
+extern unsigned char _binary_obj___user_exit_out_start;
+
 // user_main - kernel thread used to exec a user program
 static int
 user_main(void *arg) {
