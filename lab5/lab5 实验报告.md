@@ -307,34 +307,26 @@ out:
 
 ### 3. **用户态进程从被调度到执行第一条指令的过程**
 
-以下是用户态进程从被 ucore 调度为 RUNNING 状态，到执行应用程序第一条指令的完整过程：
+用户态进程从被ucore选择到执行第一条指令的过程如下：
 
-1. **进程创建与初始化**：
-   - 调用 `do_execve` 系统调用，内部调用 `load_icode` 函数加载并解析 ELF 文件。
-   - `load_icode` 函数完成内存映射、栈建立和 `trapframe` 设置，确保新进程拥有独立的地址空间和正确的执行环境。
-
-2. **将进程状态设置为可运行**：
-   - 在 `do_execve` 或 `load_icode` 完成后，进程的状态被设置为 `PROC_RUNNABLE`，表示该进程可以被调度器调度执行。
-
-3. **进程调度**：
-   - 调度器（`schedule` 函数）选择一个可运行的进程（包括刚刚加载的用户进程）进行执行。
-   - 调用 `proc_run` 函数，将选中的进程调度到 CPU 上运行。
-
-4. **上下文切换**：
-   - 在 `proc_run` 中，通过禁用中断、切换页目录表和调用 `switch_to` 函数实现上下文切换。
-   - `switch_to` 函数保存当前进程的上下文（寄存器状态等），并恢复即将运行的进程的上下文。
-
-5. **恢复用户态执行环境**：
-   - 恢复后的进程拥有其对应的 `trapframe`，包括用户栈指针 (`sp`)、程序计数器 (`epc`) 和状态寄存器 (`status`)。
-   - 通过 `lcr3` 切换到进程的页目录表，确保虚拟内存映射正确。
-
-6. **从用户态返回执行**：
-   - 调用 `usertrapret` 或类似的函数，利用 `trapframe` 中保存的状态恢复用户态执行。
-   - CPU 从内核态切换回用户态，开始执行用户程序的第一条指令，从 `epc` 指定的入口地址开始。
-
-7. **执行用户程序**：
-   - 用户程序的第一条指令在正确的用户态和地址空间中开始执行。
-   - 用户程序按照其代码逻辑运行，使用设置好的栈空间和数据段。
+- 用户态进程首先由操作系统内核创建。操作系统会为该进程分配所需的资源，包括内存空间和其他必要的数据结构。代码里内核线程initproc创建用户态进程userproc。（具体是在init_main函数中调了kernal_thread函数来创建一个新的进程并把user_main作为参数传入）
+- 进程被创建后，它处于就绪态，被加入到可运行的进程队列中等待操作系统调度它来执行。
+- 在`int pid = kernel_thread(user_main, NULL, 0);`创建出user进程之后，会执行`do_wait(0, NULL)函数`。do_wait函数确认存在RUNNABLE的子进程后，调用schedule函数。
+- schedule函数通过调用proc_run来运行新线程。
+- proc_run中：
+  - 加载userproc的页目录表。用户态的页目录表与内核态的页目录表不同，因此要重新加载页目录表。
+  - 切换进程上下文，然后跳转到forkret。forkret函数直接调用forkrets函数，forkrets将栈指针指向userproc->tf的地址，然后跳到__trapret。
+- __trapret函数将userproc->tf的内容pop给相应寄存器，然后通过sret指令，跳转到userproc->tf.epc指向的函数，即kernel_thread_entry。
+- kernel_thread_entry相当于加的一层汇编壳，在这会继续跳转到user_main。
+- user_main打印userproc的pid和name信息，然后调用kernel_execve。
+- kernel_execve执行exec系统调用，CPU检测到系统调用后，保存现场信息，然后根据中断号查找中断向量表，进入中断处理例程。
+- 经过一系列的函数跳转，最终进入到exec的系统处理函数do_execve中。
+- do_execve检查虚拟内存空间的合法性，释放虚拟内存空间，加载应用程序，创建新的mm结构和页目录表。
+- do_execve调用load_icode函数，load_icode加载应用程序的各个program section到新申请的内存上，为BSS section分配内存并初始化为全0，分配用户栈内存空间。
+- 设置当前用户进程的mm结构、页目录表的地址及加载页目录表地址到cr3寄存器。 设置当前用户进程的tf结构。
+- 返回到do_execve函数，设置当前用户进程的名字为“exit”后返回。
+- 通过__trapret函数将栈上保存的tf的内容pop给相应的寄存器，然后跳转到epc指向的函数，即应用程序的入口（exit.c文件中的main函数）。
+- 执行用户程序。
 
 
 ## 练习2: 父进程复制自己的内存空间给子进程（需要编码）
